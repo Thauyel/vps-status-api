@@ -25,6 +25,12 @@ def check_screen(name: str) -> bool:
     return name in result.stdout
 
 
+def check_srcds() -> bool:
+    """Check if srcds process is actually running (more reliable than screen alone)."""
+    result = subprocess.run(["pgrep", "-f", "srcds_linux"], capture_output=True, text=True)
+    return len(result.stdout.strip()) > 0
+
+
 def check_process(name: str) -> bool:
     result = subprocess.run(["pgrep", "-f", name], capture_output=True, text=True)
     return len(result.stdout) > 0
@@ -89,7 +95,7 @@ def get_system_stats() -> dict:
 def status():
     return {
         "minecraft": {"online": check_screen("polimc")},
-        "gmod": {"online": check_screen("gmod")},
+        "gmod": {"online": check_srcds()},
         "terraria": {"online": check_screen("terraria")},
         "pqr": {"online": check_process("server.py")},
         "dcbot": {"online": check_process("main.py")},
