@@ -1,13 +1,14 @@
 #!/home/ubuntu/iris/venv/bin/python3
 """
-Server status API — queries Minecraft, GMod, and Terraria.
+VPS Status API — game server status via screen sessions + system metrics via psutil.
+Replaces the standalone glances approach with direct polling.
 """
-import json
-import socket
 import subprocess
+import socket
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
+import psutil
 
 app = FastAPI()
 app.add_middleware(
@@ -19,68 +20,50 @@ app.add_middleware(
 )
 
 
-def mc_query(host: str, port: int, timeout: float = 3.0) -> dict:
-    """Query Minecraft server via raw socket (bedrock/protocol)."""
-    try:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.settimeout(timeout)
-        # Handshake
-        handshake = b"\x00\x00"
-        handshake += b"\x00\x00"  # packet ID
-        handshake += bytes([1])   # client version
-        sock.sendto(handshake, (host, port))
-        data, _ = sock.recvfrom(4096)
-        sock.close()
-        if data:
-            return {"online": True, "players": "?"}
-    except Exception:
-        pass
-    return {"online": False, "players": 0}
+def check_screen(name: str) -> bool:
+    result = subprocess.run(["screen", "-ls"], capture_output=True, text=True)
+    return name in result.stdout
 
 
-def check_process(name: str, screen: str = None) -> dict:
-    """Check if a process or screen session is running."""
-    if screen:
-        result = subprocess.run(["screen", "-ls"], capture_output=True, text=True)
-        running = screen in result.stdout
-        return {"online": running}
-    # Fallback: check process
+def check_process(name: str) -> bool:
     result = subprocess.run(["pgrep", "-a", name], capture_output=True, text=True)
-    return {"online": len(result.stdout) > 0}
+    return len(result.stdout) > 0
+
+
+def get_system_stats() -> dict:
+    mem = psutil.virtual_memory()
+    disk = psutil.disk_usage('/')
+    cpu_load = psutil.getloadavg() if hasattr(psutil, 'getloadavg') else [0, 0, 0]
+    boot_time = psutil.boot_time()
+    return {
+        "ram_used_gb": round(mem.used / (1024**3), 1),
+        "ram_total_gb": round(mem.total / (1024**3), 1),
+        "ram_pct": mem.percent,
+        "disk_used_gb": round(disk.used / (1024**3), 1),
+        "disk_total_gb": round(disk.total / (1024**3), 1),
+        "disk_pct": disk.percent,
+        "cpu_pct": psutil.cpu_percent(interval=0.5),
+        "load_1m": round(cpu_load[0], 2),
+        "load_5m": round(cpu_load[1], 2),
+        "load_15m": round(cpu_load[2], 2),
+    }
 
 
 @app.get("/status")
 def status():
-    mc = mc_query("127.0.0.1", 25565)
-    gmod = check_process("srcds_linux", "gmod")
-    terraria = check_process("TerrariaServer", "terraria")
-    polimc = check_process("paper", "polimc")
-    pqr_online = check_process("python", None)
-
-    # System stats
-    disk_used = subprocess.check_output(
-        "df -h / | tail -1 | awk '{print $3}'", shell=True
-    ).decode().strip()
-    ram_used = subprocess.check_output(
-        "free -h | grep Mem | awk '{print $3}'", shell=True
-    ).decode().strip()
-    uptime_str = subprocess.check_output(
-        "uptime -p 2>/dev/null || uptime | awk '{print $3,$4}' | tr -d ,",
-        shell=True
-    ).decode().strip()
-
     return {
-        "minecraft": {"online": polimc["online"], "players": "?"},
-        "gmod": {"online": gmod["online"], "players": "?"},
-        "terraria": {"online": terraria["online"], "players": "?"},
-        "pqr": {"online": pqr_online["online"]},
-        "dcbot": check_process("python", None)["online"],
-        "system": {
-            "disk": disk_used,
-            "ram": ram_used,
-            "uptime": uptime_str,
-        }
+        "minecraft": {"online": check_screen("polimc")},
+        "gmod": {"online": check_screen("gmod")},
+        "terraria": {"online": check_screen("terraria")},
+        "pqr": {"online": check_process("server.py")},
+        "dcbot": {"online": check_process("main.py")},
+        "system": get_system_stats(),
     }
+
+
+@app.get("/health")
+def health():
+    return {"ok": True}
 
 
 if __name__ == "__main__":
