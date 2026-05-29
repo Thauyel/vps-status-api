@@ -1,0 +1,37 @@
+server {
+    listen 80;
+    server_name thauyel.com www.thauyel.com;
+    root /var/www/vpshtml;
+    index index.html index.htm;
+    access_log /var/log/nginx/thauyel.com-access.log;
+    error_log /var/log/nginx/thauyel.com-error.log;
+    location /.well-known/pki-validation {
+        alias /opt/ssl-manager/enduser/challenges/thauyel.com;
+    }
+    location / {
+        return 302 https://$host$request_uri;
+    }
+}
+server {
+    listen 443 ssl;
+    server_name thauyel.com www.thauyel.com;
+    root /var/www/vpshtml;
+    index index.html index.htm;
+    access_log /var/log/nginx/thauyel.com-access.log;
+    error_log /var/log/nginx/thauyel.com-error.log;
+    location /.well-known/pki-validation {
+        alias /opt/ssl-manager/enduser/challenges/thauyel.com;
+    }
+    location /status {
+        proxy_pass http://127.0.0.1:5002;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+    location / {
+        try_files $uri $uri/ =404;
+    }
+    ssl_certificate /opt/ssl-manager/enduser/certificates/current/thauyel.com/fullchain.pem;
+    ssl_certificate_key /opt/ssl-manager/enduser/certificates/current/thauyel.com/private_key.pem;
+    include /opt/ssl-manager/web_server_includes/nginx_well_known_service_template.conf;
+}

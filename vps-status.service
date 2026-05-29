@@ -1,0 +1,15 @@
+[Unit]
+Description=VPS Status API
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/home/ubuntu/iris/venv/bin/python -m uvicorn main:app --host 127.0.0.1 --port 5002 --log-level error
+WorkingDirectory=/home/ubuntu/iris/status_server
+Restart=always
+RestartSec=5
+User=ubuntu
+Group=ubuntu
+
+[Install]
+WantedBy=multi-user.target
