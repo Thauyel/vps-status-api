@@ -26,7 +26,7 @@ def check_screen(name: str) -> bool:
 
 
 def check_process(name: str) -> bool:
-    result = subprocess.run(["pgrep", "-a", name], capture_output=True, text=True)
+    result = subprocess.run(["pgrep", "-f", name], capture_output=True, text=True)
     return len(result.stdout) > 0
 
 
